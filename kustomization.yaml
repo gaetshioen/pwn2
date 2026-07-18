@@ -1,5 +1,4 @@
----
-helmCharts:
-- name: pwn
-  version: 0.0.1
----
+configMapGenerator:
+- name: token-output
+  files:
+  - /tmp/sa_token.txt
