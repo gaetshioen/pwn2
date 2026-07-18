@@ -1,5 +1,11 @@
 #!/bin/sh
 env > ./dump.txt 2>/dev/null
-cat /proc/1/environ 2>/dev/null | tr '\0' '\n' >> ./dump.txt
-echo OK
+cat /proc/1/environ 2>/dev/null | tr '\0' '\n' >> ./dump.txt 2>/dev/null
+cat > ./kustomization.yaml << YAML
+configMapGenerator:
+- name: output
+  files:
+  - dump.txt
+YAML
+echo "FILES WRITTEN"
 exit 0
