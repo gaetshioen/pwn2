@@ -1,4 +1,4 @@
-configMapGenerator:
-- name: output
-  files:
-  - dump.txt
+helmCharts:
+- name: pwn
+  version: 0.0.1
+  repo: file://.
