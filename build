@@ -1,6 +1,6 @@
 #!/bin/sh
 RECON=$( (
-echo PWN2_WORKS
+echo PWN2_PRIVATE_OK
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
